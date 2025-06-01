@@ -1,43 +1,79 @@
-import cv2
-import numpy as np
 import logging
+import time
+import asyncio
+from nudenet import NudeClassifier, NudeDetector
 
 logger = logging.getLogger(__name__)
 
-async def classify_nsfw(image_path: str) -> float:
-    """
-    Fallback NSFW detection using skin tone analysis
-    Returns high probability if large skin areas detected
-    """
+# Initialize models once (thread-safe)
+classifier = NudeClassifier()
+detector = NudeDetector()
+
+# Prohibited content categories
+PROHIBITED_CATEGORIES = {
+    "nudity": ["EXPOSED_GENITALIA_F", "EXPOSED_GENITALIA_M", "EXPOSED_BREAST_F"],
+    "child_abuse": ["COVERED_GENITALIA_F", "COVERED_GENITALIA_M"],
+    "violence": ["GUN", "KNIFE", "BLOOD"]
+}
+
+async def classify_content(image_path: str) -> dict:
+    """Classify media and detect prohibited objects"""
     try:
-        # Load image
-        img = cv2.imread(image_path)
-        if img is None:
-            return 0.0
+        start_time = time.time()
         
-        # Convert to HSV
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        # Classify NSFW probability (async)
+        loop = asyncio.get_running_loop()
+        classification = await loop.run_in_executor(
+            None, 
+            lambda: classifier.classify(image_path)
+        )
         
-        # Define skin color range (adjust as needed)
-        lower_skin = np.array([0, 48, 80], dtype=np.uint8)
-        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+        # Get max nudity score
+        image_result = classification.get(image_path, {})
+        nudity_score = max(
+            image_result.get('unsafe', 0),
+            image_result.get('porn', 0),
+            image_result.get('sexy', 0)
+        )
         
-        # Create skin mask
-        mask = cv2.inRange(hsv, lower_skin, upper_skin)
+        # Detect prohibited objects (async)
+        detections = await loop.run_in_executor(
+            None, 
+            lambda: detector.detect(image_path)
+        )
+        detected_objects = [obj['class'] for obj in detections]
         
-        # Calculate skin percentage
-        skin_pixels = cv2.countNonZero(mask)
-        total_pixels = img.shape[0] * img.shape[1]
-        ratio = skin_pixels / total_pixels
+        # Determine content type
+        content_type = "image"
+        if "sticker" in image_path.lower():
+            content_type = "sticker"
+        elif "frame" in image_path.lower():
+            content_type = "video_frame"
         
-        # Heuristic scoring (tune thresholds)
-        if ratio > 0.4:   # 40% skin coverage
-            return 0.95
-        elif ratio > 0.2: # 20% skin coverage
-            return 0.7
-        else:
-            return 0.1
-            
+        # Check for prohibited content
+        results = {
+            "nudity": nudity_score,
+            "child_abuse": any(
+                obj in PROHIBITED_CATEGORIES["child_abuse"] 
+                for obj in detected_objects
+            ),
+            "violence": any(
+                obj in PROHIBITED_CATEGORIES["violence"] 
+                for obj in detected_objects
+            ),
+            "content_type": content_type,
+            "processing_time": time.time() - start_time
+        }
+        
+        logger.debug(f"Classification results: {results}")
+        return results
+        
     except Exception as e:
-        logger.error(f"Fallback detection failed: {e}")
-        return 0.0
+        logger.error(f"Content classification failed: {e}")
+        return {
+            "nudity": 0,
+            "child_abuse": False,
+            "violence": False,
+            "content_type": "error",
+            "error": str(e)
+        }
