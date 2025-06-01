@@ -2,7 +2,7 @@ import os
 import logging
 import urllib.request
 from nudenet import NudeClassifier
-from nudenet import Classifier
+from nudenet.classifier import Classifier
 
 classifier = Classifier()
 
