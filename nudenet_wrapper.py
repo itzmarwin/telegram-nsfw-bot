@@ -1,6 +1,7 @@
 import logging
 import time
 import asyncio
+import re
 from nudenet import NudeDetector
 
 logger = logging.getLogger(__name__)
@@ -8,36 +9,31 @@ logger = logging.getLogger(__name__)
 # Initialize detector (thread-safe)
 detector = NudeDetector()
 
-# Prohibited content categories
-PROHIBITED_CATEGORIES = {
+# Prohibited content patterns (using regex for better matching)
+PROHIBITED_PATTERNS = {
     "nudity": [
-        "FEMALE_GENITALIA_EXPOSED",
-        "MALE_GENITALIA_EXPOSED",
-        "FEMALE_BREAST_EXPOSED",
-        "ANUS_EXPOSED",
-        "FEET_EXPOSED",
-        "BELLY_EXPOSED",
-        "ARMPITS_EXPOSED"
+        r"exposed", r"genitalia", r"breast", r"anus", 
+        r"naked", r"nude", r"sex", r"porn", r"hentai",
+        r"bdsm", r"fuck", r"penis", r"vagina", r"ass"
     ],
     "child_abuse": [
-        "FEMALE_GENITALIA_COVERED",
-        "MALE_GENITALIA_COVERED",
-        "FEMALE_BREAST_COVERED",
-        "ANUS_COVERED",
-        "FEET_COVERED",
-        "BELLY_COVERED",
-        "ARMPITS_COVERED"
+        r"child", r"minor", r"young", r"teen", r"underage", 
+        r"loli", r"shota", r"school", r"kid", r"young",
+        r"covered_genitalia", r"covered_breast"
     ],
     "violence": [
-        "GUN",
-        "KNIFE",
-        "BLOOD",
-        "VIOLENCE"
+        r"gun", r"knife", r"weapon", r"blood", r"violence",
+        r"fight", r"hit", r"injury", r"wound", r"blood",
+        r"gore", r"torture", r"abuse"
+    ],
+    "drugs": [
+        r"drug", r"pill", r"syringe", r"joint", r"smoking",
+        r"cocaine", r"heroin", r"marijuana", r"inject"
     ]
 }
 
 async def classify_content(image_path: str) -> dict:
-    """Classify media and detect prohibited objects"""
+    """Classify media and detect prohibited objects with enhanced pattern matching"""
     try:
         start_time = time.time()
         
@@ -48,7 +44,7 @@ async def classify_content(image_path: str) -> dict:
             lambda: detector.detect(image_path)
         )
         
-        # Extract detected classes with their confidence scores
+        # Create a dictionary of detected objects with confidence scores
         detected_objects = {}
         for obj in detections:
             class_name = obj['class']
@@ -57,25 +53,24 @@ async def classify_content(image_path: str) -> dict:
             if class_name not in detected_objects or confidence > detected_objects[class_name]:
                 detected_objects[class_name] = confidence
         
-        # Calculate nudity score (max of nudity categories)
-        nudity_score = 0.0
-        for category in PROHIBITED_CATEGORIES["nudity"]:
-            if category in detected_objects:
-                nudity_score = max(nudity_score, detected_objects[category])
+        # Calculate category scores using pattern matching
+        category_scores = {
+            "nudity": 0.0,
+            "child_abuse": 0.0,
+            "violence": 0.0,
+            "drugs": 0.0
+        }
         
-        # Check for child abuse content
-        child_abuse_detected = any(
-            category in detected_objects
-            for category in PROHIBITED_CATEGORIES["child_abuse"]
-        )
+        # Calculate max score for each category
+        for class_name, confidence in detected_objects.items():
+            class_lower = class_name.lower()
+            for category, patterns in PROHIBITED_PATTERNS.items():
+                for pattern in patterns:
+                    if re.search(pattern, class_lower):
+                        if confidence > category_scores[category]:
+                            category_scores[category] = confidence
         
-        # Check for violence
-        violence_detected = any(
-            category in detected_objects
-            for category in PROHIBITED_CATEGORIES["violence"]
-        )
-        
-        # Determine content type based on file path
+        # Determine content type
         content_type = "image"
         if "sticker" in image_path.lower():
             content_type = "sticker"
@@ -84,24 +79,33 @@ async def classify_content(image_path: str) -> dict:
         
         # Prepare results
         results = {
-            "nudity": nudity_score,
-            "child_abuse": child_abuse_detected,
-            "violence": violence_detected,
+            "nudity": category_scores["nudity"],
+            "child_abuse": category_scores["child_abuse"],
+            "violence": category_scores["violence"],
+            "drugs": category_scores["drugs"],
             "content_type": content_type,
-            "processing_time": time.time() - start_time,
-            "detected_objects": list(detected_objects.keys())  # For debugging
+            "detected_objects": detected_objects,
+            "processing_time": time.time() - start_time
         }
         
-        logger.debug(f"Classification results: {results}")
+        logger.info(
+            f"Classification: {image_path} - "
+            f"Nudity: {results['nudity']:.2f}, "
+            f"Child Abuse: {results['child_abuse']:.2f}, "
+            f"Violence: {results['violence']:.2f}, "
+            f"Objects: {list(detected_objects.keys())}"
+        )
+        
         return results
         
     except Exception as e:
         logger.error(f"Content classification failed: {e}", exc_info=True)
         return {
             "nudity": 0,
-            "child_abuse": False,
-            "violence": False,
+            "child_abuse": 0,
+            "violence": 0,
+            "drugs": 0,
             "content_type": "error",
-            "error": str(e),
-            "detected_objects": []
+            "detected_objects": {},
+            "error": str(e)
         }
