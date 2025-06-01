@@ -1,4 +1,5 @@
 import os
+import io  # Added missing import
 import logging
 import asyncio
 import aiofiles
