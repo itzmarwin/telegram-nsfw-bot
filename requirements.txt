@@ -1,8 +1,7 @@
-# Update requirements.txt with correct package names
-echo "python-telegram-bot[ext]~=20.3
-nudenet~=0.1.5  # Correct package name
+python-telegram-bot[ext]~=20.3
+nudenet~=0.1.5
 Pillow~=10.3.0
 ffmpeg-python~=0.2.0
 lottie~=0.7.4
 python-dotenv~=1.0.1
-aiofiles~=23.2.1" > requirements.txt
+aiofiles~=23.2.1
