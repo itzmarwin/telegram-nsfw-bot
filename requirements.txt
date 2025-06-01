@@ -1,8 +1,8 @@
 python-telegram-bot[ext]==20.3
-nudenet==3.4.2  # Updated to latest stable version
+nudenet==3.4.2
 Pillow==10.3.0
 ffmpeg-python==0.2.0
-lottie==0.7.4
+lottie==0.7.2  # Changed to latest available version
 python-dotenv==1.0.1
 aiofiles==23.2.1
 opencv-python-headless==4.9.0.80
