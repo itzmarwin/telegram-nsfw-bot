@@ -1,8 +1,7 @@
 import os
+import logging
 from dotenv import load_dotenv
 load_dotenv()
-import asyncio
-import logging
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -12,11 +11,11 @@ from telegram.ext import (
     ContextTypes
 )
 from media_processor import process_media
-from nudenet_wrapper import classify_nsfw
+from nudenet_wrapper import classify_content
+from content_policy import policy
 
 # Bot configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-NSFW_THRESHOLD = 0.7  # 70% probability threshold
 
 # Setup logging
 logging.basicConfig(
@@ -30,24 +29,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user = message.from_user
     
-    # Skip if message doesn't contain processable media
+    # Skip if no processable media (photos or stickers)
     if not (message.photo or message.sticker):
         return
     
+    media_file = None
     try:
-        # Determine media type and process
+        # Process media (convert stickers to images)
         media_file = await process_media(message, context.bot)
         if not media_file:
             return
             
-        # Classify NSFW content
-        nsfw_score = await classify_nsfw(media_file)
-        logger.info(f"NSFW scan result for {user.id}: {nsfw_score:.2f}")
+        # Classify content using NudeNet
+        content_result = await classify_content(media_file)
         
-        # Delete if NSFW detected
-        if nsfw_score >= NSFW_THRESHOLD:
+        # Log results
+        logger.info(
+            f"Content scan for user {user.id}: "
+            f"Nudity: {content_result['nudity']:.2f}, "
+            f"Child Abuse: {content_result['child_abuse']}, "
+            f"Violence: {content_result['violence']}"
+        )
+        
+        # Apply content policy
+        if policy.should_delete(content_result):
             await message.delete()
-            logger.info(f"Deleted NSFW content from {user.id} (Score: {nsfw_score:.2f})")
+            logger.warning(
+                f"Deleted prohibited content from user {user.id}: "
+                f"Type: {content_result['content_type']}"
+            )
             
     except Exception as e:
         logger.error(f"Error processing message: {e}")
@@ -56,24 +66,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if media_file and os.path.exists(media_file):
             os.remove(media_file)
 
-async def post_init(application: Application):
-    """Post initialization message"""
-    await application.bot.set_my_commands([('start', 'Initialize the bot')])
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     await update.message.reply_text(
-        "🛡️ NSFW Auto-Moderation Bot is active!\n\n"
+        "🛡️ Auto-Moderation Bot is active!\n\n"
         "I automatically detect and delete:\n"
-        "• Explicit images\n"
-        "• NSFW stickers\n"
-        "• Adult video stickers\n\n"
-        "Normal content is never deleted. Make me admin with delete permissions!"
+        "• Explicit 18+ content\n"
+        "• Child abuse material\n"
+        "• Violent content\n\n"
+        "Normal stickers and images are never deleted!"
     )
 
 def main():
     """Start the bot"""
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    app = Application.builder().token(BOT_TOKEN).build()
     
     # Add handlers
     app.add_handler(MessageHandler(
