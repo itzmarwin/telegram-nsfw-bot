@@ -1,7 +1,7 @@
 import os
 import logging
 import urllib.request
-from nude import NudeClassifier
+from nudenet import NudeClassifier
 
 logger = logging.getLogger(__name__)
 MODEL_URL = "https://github.com/notAI-tech/NudeNet/releases/download/v0/classifier_model.onnx"
