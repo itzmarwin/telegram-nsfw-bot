@@ -1,39 +1,43 @@
 import logging
 import time
 import asyncio
-import os
 from nudenet import NudeDetector
 
 logger = logging.getLogger(__name__)
 
-# Initialize detector
+# Initialize detector (thread-safe)
 detector = NudeDetector()
 
-# Correct prohibited content categories (updated for NudeNet v3.4.2)
+# Prohibited content categories
 PROHIBITED_CATEGORIES = {
     "nudity": [
         "FEMALE_GENITALIA_EXPOSED",
         "MALE_GENITALIA_EXPOSED",
         "FEMALE_BREAST_EXPOSED",
         "ANUS_EXPOSED",
-        "BUTTOCKS_EXPOSED"
+        "FEET_EXPOSED",
+        "BELLY_EXPOSED",
+        "ARMPITS_EXPOSED"
     ],
     "child_abuse": [
         "FEMALE_GENITALIA_COVERED",
         "MALE_GENITALIA_COVERED",
         "FEMALE_BREAST_COVERED",
-        "MINORS"
+        "ANUS_COVERED",
+        "FEET_COVERED",
+        "BELLY_COVERED",
+        "ARMPITS_COVERED"
     ],
     "violence": [
         "GUN",
         "KNIFE",
         "BLOOD",
-        "WEAPON"
+        "VIOLENCE"
     ]
 }
 
 async def classify_content(image_path: str) -> dict:
-    """Classify media and detect prohibited objects with enhanced detection"""
+    """Classify media and detect prohibited objects"""
     try:
         start_time = time.time()
         
@@ -44,35 +48,34 @@ async def classify_content(image_path: str) -> dict:
             lambda: detector.detect(image_path)
         )
         
-        # Log raw detections for debugging
-        logger.info(f"Raw detections for {os.path.basename(image_path)}: {detections}")
+        # Extract detected classes with their confidence scores
+        detected_objects = {}
+        for obj in detections:
+            class_name = obj['class']
+            confidence = obj['score']
+            # Keep the highest confidence per class
+            if class_name not in detected_objects or confidence > detected_objects[class_name]:
+                detected_objects[class_name] = confidence
         
-        # Initialize results
+        # Calculate nudity score (max of nudity categories)
         nudity_score = 0.0
-        child_abuse = False
-        violence = False
+        for category in PROHIBITED_CATEGORIES["nudity"]:
+            if category in detected_objects:
+                nudity_score = max(nudity_score, detected_objects[category])
         
-        # Process each detection
-        for detection in detections:
-            class_name = detection['class']
-            score = detection['score']
-            
-            # Nudity detection (track highest score)
-            if class_name in PROHIBITED_CATEGORIES["nudity"]:
-                if score > nudity_score:
-                    nudity_score = score
-            
-            # Child abuse detection (any match with sufficient confidence)
-            if class_name in PROHIBITED_CATEGORIES["child_abuse"]:
-                if score > 0.3:  # 30% confidence threshold
-                    child_abuse = True
-                    
-            # Violence detection (any match with sufficient confidence)
-            if class_name in PROHIBITED_CATEGORIES["violence"]:
-                if score > 0.4:  # 40% confidence threshold
-                    violence = True
+        # Check for child abuse content
+        child_abuse_detected = any(
+            category in detected_objects
+            for category in PROHIBITED_CATEGORIES["child_abuse"]
+        )
         
-        # Determine content type
+        # Check for violence
+        violence_detected = any(
+            category in detected_objects
+            for category in PROHIBITED_CATEGORIES["violence"]
+        )
+        
+        # Determine content type based on file path
         content_type = "image"
         if "sticker" in image_path.lower():
             content_type = "sticker"
@@ -82,21 +85,23 @@ async def classify_content(image_path: str) -> dict:
         # Prepare results
         results = {
             "nudity": nudity_score,
-            "child_abuse": child_abuse,
-            "violence": violence,
+            "child_abuse": child_abuse_detected,
+            "violence": violence_detected,
             "content_type": content_type,
-            "processing_time": time.time() - start_time
+            "processing_time": time.time() - start_time,
+            "detected_objects": list(detected_objects.keys())  # For debugging
         }
         
         logger.debug(f"Classification results: {results}")
         return results
         
     except Exception as e:
-        logger.error(f"Content classification failed: {e}")
+        logger.error(f"Content classification failed: {e}", exc_info=True)
         return {
             "nudity": 0,
             "child_abuse": False,
             "violence": False,
             "content_type": "error",
-            "error": str(e)
+            "error": str(e),
+            "detected_objects": []
         }
