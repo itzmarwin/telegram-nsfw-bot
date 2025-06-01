@@ -1,23 +1,32 @@
-# Telegram NSFW Auto-Moderation Bot
+# Telegram Content Moderation Bot
 
-Automatically detects and deletes NSFW images, stickers, and video stickers in Telegram groups using AI.
+Automatically detects and deletes prohibited content in Telegram groups:
 
 ## Features
-- 🚫 Deletes explicit images
-- 🖼️ Converts stickers to images for detection
-- 📹 Processes video stickers
-- ⚡ Real-time moderation
-- 🔒 Privacy focused (no data storage)
+- 🚫 Deletes 18+ explicit content
+- 🛡️ Blocks child abuse material
+- 🔫 Removes violent content
+- 🖼️ Processes images and static stickers
+- 📹 Handles video stickers and animated stickers
+- ⚙️ Configurable sensitivity thresholds
+- 📊 Detailed logging for moderation actions
 
 ## System Requirements
-- Linux VPS (Ubuntu 20.04+ recommended)
-- Python 3.11+
+- Docker
 - FFmpeg
-- Cairo 2D library
+- Python 3.11+
+- Cairo graphics library
 
 ## Installation
 
-### 1. Clone Repository
+### Docker Setup (Recommended)
 ```bash
-git clone https://github.com/yourusername/telegram-nsfw-bot.git
-cd telegram-nsfw-bot
+# Build the image
+docker build -t telegram-mod-bot .
+
+# Run the container
+docker run -d \
+  --name mod-bot \
+  -e BOT_TOKEN="YOUR_BOT_TOKEN" \
+  -e NUDITY_THRESHOLD=0.75 \
+  telegram-mod-bot
