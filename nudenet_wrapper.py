@@ -1,39 +1,57 @@
 import os
 import logging
-from nudenet import NudeClassifier  # Updated import for v2.0.9
+import urllib.request
+from nude import NudeClassifier
 
-# Initialize classifier globally
-classifier = None
 logger = logging.getLogger(__name__)
+MODEL_URL = "https://github.com/notAI-tech/NudeNet/releases/download/v0/classifier_model.onnx"
+MODEL_PATH = os.path.expanduser("~/.NudeNet/classifier_model.onnx")
+
+def download_model():
+    """Download model directly from GitHub"""
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    try:
+        logger.info("Downloading model from GitHub...")
+        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+        logger.info("Model downloaded successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Model download failed: {e}")
+        return False
 
 def initialize_classifier():
-    """Initialize NudeNet classifier once"""
     global classifier
     if classifier is None:
-        logger.info("Loading NudeNet classifier...")
-        classifier = NudeClassifier()
-        logger.info("Classifier loaded successfully")
+        # Ensure model exists
+        if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) == 0:
+            if not download_model():
+                return
+        
+        try:
+            logger.info("Loading classifier...")
+            classifier = NudeClassifier()
+            logger.info("Classifier loaded")
+        except Exception as e:
+            logger.error(f"Classifier init failed: {e}")
+            # Try reinstalling model
+            os.remove(MODEL_PATH)
+            if download_model():
+                classifier = NudeClassifier()
 
 async def classify_nsfw(image_path: str) -> float:
-    """
-    Classify image as NSFW and return unsafe probability score.
-    Returns 0.0 if error occurs.
-    """
     try:
         initialize_classifier()
-
-        if not os.path.exists(image_path):
-            logger.error(f"Image not found: {image_path}")
+        if not classifier:
+            logger.error("Classifier unavailable")
             return 0.0
-
-        # Get classification results
-        results = classifier.classify(image_path)
-        logger.debug(f"Classification results for {image_path}: {results}")
-
-        unsafe_prob = results[image_path].get('unsafe', 0.0)
-        return unsafe_prob
-
-    except Exception as e:
-        logger.error(f"Classification failed: {e}")
-        return 0.0
         
+        if not os.path.exists(image_path):
+            logger.error(f"Missing image: {image_path}")
+            return 0.0
+        
+        results = classifier.classify(image_path)
+        return results[image_path].get('unsafe', 0.0)
+        
+    except Exception as e:
+        logger.error(f"Classification error: {e}")
+        return 0.0
