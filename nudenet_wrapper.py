@@ -1,7 +1,7 @@
 import os
 import logging
 import urllib.request
-from nudenet.classifier import Classifier
+from nudenet import Classifier
 
 classifier = None  # Start with None so we can initialize later
 
