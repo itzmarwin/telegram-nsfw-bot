@@ -36,3 +36,4 @@ async def classify_nsfw(image_path: str) -> float:
     except Exception as e:
         logger.error(f"Classification failed: {e}")
         return 0.0
+        
