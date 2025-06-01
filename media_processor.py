@@ -80,7 +80,7 @@ async def extract_video_frames(video_path: str) -> list:
                         ffmpeg
                         .input(video_path, ss=timestamp)
                         .filter('scale', MIN_WIDTH, -1)  # Ensure minimum width
-                        .output(frame_file.name, vframes=1, q:v=2)
+                        .output(frame_file.name, vframes=1, qscale=2)
                         .run(capture_stdout=True, capture_stderr=True, overwrite_output=True)
                     )
                     logger.debug(f"Extracted video frame at {timestamp}s: {frame_file.name}")
