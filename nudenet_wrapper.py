@@ -2,186 +2,105 @@ import logging
 import time
 import asyncio
 import re
-import cv2
-import numpy as np
 from nudenet import NudeDetector
 
 logger = logging.getLogger(__name__)
 
-# Initialize detector (thread-safe)
 detector = NudeDetector()
 
-# Prohibited content patterns (using regex for better matching)
+# Comprehensive prohibited patterns
 PROHIBITED_PATTERNS = {
-    "nudity": [
-        r"exposed", r"genitalia", r"breast", r"anus", 
-        r"naked", r"nude", r"sex", r"porn", r"hentai",
-        r"bdsm", r"fuck", r"penis", r"vagina", r"ass"
+    "explicit": [
+        r"exposed_genitalia", r"genitalia", r"breast", r"anus", 
+        r"penis", r"vagina", r"pussy", r"clitoris", r"buttocks",
+        r"intercourse", r"sex", r"bdsm", r"fetish", r"insertion"
+    ],
+    "suggestive": [
+        r"covered_genitalia", r"covered_breast", r"lingerie",
+        r"bikini", r"underwear", r"cleavage", r"cameltoe",
+        r"bulge", r"seductive", r"provocative"
     ],
     "child_abuse": [
-        r"child", r"minor", r"young", r"teen", r"underage", 
-        r"loli", r"shota", r"school", r"kid", r"young",
-        r"covered_genitalia", r"covered_breast"
+        r"child", r"minor", r"teen", r"underage", r"loli", 
+        r"shota", r"school", r"youth", r"adolescent"
     ],
     "violence": [
-        r"gun", r"knife", r"weapon", r"blood", r"violence",
-        r"fight", r"hit", r"injury", r"wound", r"blood",
-        r"gore", r"torture", r"abuse"
-    ],
-    "drugs": [
-        r"drug", r"pill", r"syringe", r"joint", r"smoking",
-        r"cocaine", r"heroin", r"marijuana", r"inject"
+        r"gun", r"knife", r"weapon", r"blood", r"gore",
+        r"torture", r"abuse", r"hit", r"fight", r"injury"
     ]
 }
 
-def enhance_image_contrast(image_path: str):
-    """Increase contrast for better detection of small stickers"""
-    try:
-        img = cv2.imread(image_path)
-        if img is None:
-            return False
-        
-        # Convert to LAB color space
-        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        
-        # Apply CLAHE to L-channel
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-        cl = clahe.apply(l)
-        
-        # Merge channels and convert back to BGR
-        limg = cv2.merge((cl, a, b))
-        enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
-        
-        # Save enhanced image
-        cv2.imwrite(image_path, enhanced)
-        return True
-    except Exception as e:
-        logger.error(f"Image enhancement failed: {e}")
-        return False
-
 async def classify_content(image_paths: list) -> dict:
-    """Classify media with enhanced video sticker handling"""
+    """Advanced classification with focus on subtle details"""
     if not image_paths:
-        return {
-            "nudity": 0,
-            "child_abuse": 0,
-            "violence": 0,
-            "drugs": 0,
-            "content_type": "error",
-            "detected_objects": {},
-            "error": "No images provided"
-        }
+        return {"error": "No images provided", "max_score": 0}
     
-    # Process each image
     results = []
-    for image_path in image_paths:
+    for path in image_paths:
         try:
-            # Enhance contrast for small stickers
-            if "sticker" in image_path.lower():
-                enhance_image_contrast(image_path)
-            
             start_time = time.time()
-            
-            # Run detection (async)
-            loop = asyncio.get_running_loop()
-            detections = await loop.run_in_executor(
-                None, 
-                lambda: detector.detect(image_path)
+            detections = await asyncio.get_running_loop().run_in_executor(
+                None, detector.detect, path
             )
             
-            # Create a dictionary of detected objects with confidence scores
+            # Calculate scores based on patterns
+            scores = {category: 0.0 for category in PROHIBITED_PATTERNS}
             detected_objects = {}
+            
             for obj in detections:
                 class_name = obj['class']
                 confidence = obj['score']
-                # Keep the highest confidence per class
-                if class_name not in detected_objects or confidence > detected_objects[class_name]:
-                    detected_objects[class_name] = confidence
-            
-            # Calculate category scores using pattern matching
-            category_scores = {
-                "nudity": 0.0,
-                "child_abuse": 0.0,
-                "violence": 0.0,
-                "drugs": 0.0
-            }
-            
-            # Calculate max score for each category
-            for class_name, confidence in detected_objects.items():
+                
+                # Track all detected objects
+                detected_objects[class_name] = max(
+                    detected_objects.get(class_name, 0),
+                    confidence
+                )
+                
+                # Apply pattern matching
                 class_lower = class_name.lower()
                 for category, patterns in PROHIBITED_PATTERNS.items():
                     for pattern in patterns:
                         if re.search(pattern, class_lower):
-                            if confidence > category_scores[category]:
-                                category_scores[category] = confidence
+                            if confidence > scores[category]:
+                                scores[category] = confidence
             
-            # Determine content type
-            content_type = "image"
-            if "sticker" in image_path.lower():
-                content_type = "sticker"
-            elif "frame" in image_path.lower():
-                content_type = "video_frame"
+            # Boost scores for suggestive content near explicit
+            if scores["suggestive"] > 0.4 and scores["explicit"] > 0.2:
+                scores["explicit"] = max(scores["explicit"], scores["suggestive"] * 1.2)
             
-            # Prepare frame result
-            frame_result = {
-                "nudity": category_scores["nudity"],
-                "child_abuse": category_scores["child_abuse"],
-                "violence": category_scores["violence"],
-                "drugs": category_scores["drugs"],
-                "content_type": content_type,
+            # Penalize small images
+            if "sticker" in path.lower() or "frame" in path.lower():
+                for category in scores:
+                    scores[category] *= 1.3  # Boost detection for stickers
+                    
+            results.append({
+                "scores": scores,
                 "detected_objects": detected_objects,
                 "processing_time": time.time() - start_time,
-                "frame_path": image_path
-            }
-            
-            logger.info(
-                f"Frame classification: {image_path} - "
-                f"Nudity: {frame_result['nudity']:.2f}, "
-                f"Child Abuse: {frame_result['child_abuse']:.2f}, "
-                f"Objects: {list(detected_objects.keys())}"
-            )
-            
-            results.append(frame_result)
+                "image_path": path
+            })
         except Exception as e:
-            logger.error(f"Frame classification failed: {e}", exc_info=True)
+            logger.error(f"Classification failed for {path}: {e}", exc_info=True)
     
-    # Aggregate results across all frames
     if not results:
-        return {
-            "nudity": 0,
-            "child_abuse": 0,
-            "violence": 0,
-            "drugs": 0,
-            "content_type": "error",
-            "detected_objects": {},
-            "error": "All frames failed classification"
-        }
+        return {"error": "All classifications failed", "max_score": 0}
     
-    # Get maximum scores across all frames
-    final_result = {
-        "nudity": max(r["nudity"] for r in results),
-        "child_abuse": max(r["child_abuse"] for r in results),
-        "violence": max(r["violence"] for r in results),
-        "drugs": max(r["drugs"] for r in results),
-        "content_type": results[0]["content_type"],
-        "detected_objects": {},
-        "frame_results": results,
-        "frame_count": len(results)
+    # Aggregate results
+    final = {
+        "max_explicit": max(r["scores"]["explicit"] for r in results),
+        "max_suggestive": max(r["scores"]["suggestive"] for r in results),
+        "max_child_abuse": max(r["scores"]["child_abuse"] for r in results),
+        "max_violence": max(r["scores"]["violence"] for r in results),
+        "all_objects": {},
+        "processed_versions": len(results),
+        "details": results
     }
     
     # Combine detected objects
-    for res in results:
-        for class_name, confidence in res["detected_objects"].items():
-            if class_name not in final_result["detected_objects"] or confidence > final_result["detected_objects"][class_name]:
-                final_result["detected_objects"][class_name] = confidence
+    for r in results:
+        for obj, conf in r["detected_objects"].items():
+            if conf > final["all_objects"].get(obj, 0):
+                final["all_objects"][obj] = conf
     
-    logger.info(
-        f"Final classification: "
-        f"Nudity: {final_result['nudity']:.2f}, "
-        f"Child Abuse: {final_result['child_abuse']:.2f}, "
-        f"Violence: {final_result['violence']:.2f}, "
-        f"Frames: {len(results)}"
-    )
-    
-    return final_result
+    return final
