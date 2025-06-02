@@ -10,7 +10,7 @@ from nudenet import NudeDetector
 logger = logging.getLogger(__name__)
 
 # Initialize detector with aggressive settings
-detector = NudeDetector(device="cuda" if os.getenv("USE_GPU") == "true" else "cpu")
+detector = NudeDetector()
 
 # Comprehensive prohibited patterns with hentai-specific terms
 PROHIBITED_PATTERNS = {
