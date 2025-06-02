@@ -92,7 +92,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🛡️ Advanced Auto-Moderation Bot is active!\n\n"
         "I automatically detect and remove:\n"
-        "• Explicit 18+ content\n"
+        "• Expliciiit 18+ content\n"
         "• Child exploitation material\n"
         "• Violent/graphic content\n"
         "• Drug-related material\n\n"
