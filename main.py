@@ -130,6 +130,12 @@ def main():
         return
     
     app = Application.builder().token(BOT_TOKEN).build()
+
+    # Check FFmpeg availability
+    if not is_ffmpeg_available():
+        logger.warning("⚠️ FFmpeg not installed! Video processing disabled.")
+    else:
+        logger.info("✅ FFmpeg available for video processing")
     
     # Add handlers
     app.add_handler(MessageHandler(
