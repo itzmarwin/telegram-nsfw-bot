@@ -1,26 +1,32 @@
 import os
 import logging
 import asyncio
-import time
+import time  # Added for performance monitoring
+import shutil  # Needed for checking ffmpeg
+
 from dotenv import load_dotenv
 load_dotenv()
+
 from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
+    filters,
+    ContextTypes
 )
+
+from media_processor import process_media
+from nudenet_wrapper import classify_content
 from content_policy import policy
-from sticker_manager import StickerManager
+
+# 🔧 Check if ffmpeg is available
+def is_ffmpeg_available():
+    return shutil.which("ffmpeg") is not None
 
 # Bot configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_IDS = [int(id) for id in os.getenv("ADMIN_IDS", "").split(",") if id]
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-DB_NAME = os.getenv("DB_NAME", "nsfw_bot")
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -30,103 +36,87 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize sticker manager
-sticker_manager = StickerManager(MONGO_URI, DB_NAME)
-
-async def detect_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /detectsticker command"""
-    user = update.effective_user
-    message = update.effective_message
-    
-    # Check if user is admin
-    if user.id not in ADMIN_IDS:
-        await message.reply_text("🚫 This command is only available to admins.")
-        return
-    
-    # Check if message is a reply to a sticker
-    if not message.reply_to_message or not message.reply_to_message.sticker:
-        await message.reply_text("ℹ️ Please reply to a sticker with /detectsticker to analyze it.")
-        return
-    
-    sticker_msg = message.reply_to_message
-    sticker = sticker_msg.sticker
-    
-    # Send processing message
-    processing_msg = await message.reply_text("🔍 Analyzing sticker...")
-    
-    # Analyze sticker
-    result_text, feature_vector = await sticker_manager.analyze_sticker(sticker_msg, context.bot)
-    
-    if not result_text:
-        await processing_msg.edit_text(feature_vector)  # feature_vector contains error message
-        return
-    
-    # Store results in database
-    sticker_manager.store_sticker_analysis(sticker, feature_vector, user.id)
-    
-    # Create action buttons
-    reply_markup = sticker_manager.create_action_buttons(sticker.file_unique_id)
-    
-    await processing_msg.edit_text(result_text, reply_markup=reply_markup)
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle button callbacks from sticker analysis"""
-    query = update.callback_query
-    await query.answer()
-    
-    user = query.from_user
-    data = query.data
-    
-    # Check if user is admin
-    if user.id not in ADMIN_IDS:
-        await query.edit_message_text("🚫 This action is only available to admins.")
-        return
-    
-    # Handle different actions
-    if data.startswith("add_nsfw_"):
-        file_unique_id = data.split("_")[2]
-        if sticker_manager.add_to_nsfw(file_unique_id, user.id):
-            await query.edit_message_text("✅ Sticker added to NSFW database.")
-        else:
-            await query.edit_message_text("❌ Failed to add sticker to NSFW database.")
-        
-    elif data == "cancel_action":
-        await query.edit_message_text("❌ Action canceled.")
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle incoming messages"""
+    """Handle messages with performance optimizations"""
     start_time = time.time()
     message = update.effective_message
     user = message.from_user
-    
+
     # Skip if no processable media
     if not (message.photo or message.sticker):
         return
-    
-    # Check if sticker is in NSFW database
-    if message.sticker:
-        sticker = message.sticker
-        if sticker_manager.is_nsfw_sticker(sticker.file_unique_id):
+
+    media_files = []
+    try:
+        # Process media with timeout
+        try:
+            media_files = await asyncio.wait_for(
+                process_media(message, context.bot),
+                timeout=15
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Media processing timed out")
+            return
+
+        if not media_files:
+            logger.debug("Media processing returned no files")
+            return
+
+        # Classify content with timeout
+        try:
+            content_result = await asyncio.wait_for(
+                classify_content(media_files),
+                timeout=20
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Classification timed out")
+            return
+
+        # Apply content policy
+        if policy.should_delete(content_result):
             try:
                 await message.delete()
-                logger.warning(f"🚫 Deleted NSFW sticker from {user.full_name} ({user.id})")
-                
+                logger.warning(
+                    f"🚫 Deleted prohibited content from {user.full_name} ({user.id}): "
+                    f"Type: {content_result.get('content_type', 'unknown')}, "
+                    f"Scores: N={content_result.get('max_explicit', 0):.2f}, "
+                    f"CA={content_result.get('max_child_abuse', 0):.2f}, "
+                    f"V={content_result.get('max_violence', 0):.2f}"
+                )
+
                 # Send warning to user
                 try:
                     warning = await message.reply_text(
-                        "⚠️ Your sticker was removed for violating NSFW policy."
+                        "⚠️ Your content was removed for violating community guidelines. "
+                        "Repeated violations will result in a ban."
                     )
+                    # Auto-remove warning after 10 seconds
                     await asyncio.sleep(10)
                     await warning.delete()
                 except Exception as e:
                     logger.error(f"Failed to send warning: {e}")
-                
-                return
+
             except Exception as e:
-                logger.error(f"Failed to delete NSFW sticker: {e}")
-    
-    # Process media (existing code remains the same)
-    # ... [Keep your existing media processing logic here] ...
+                logger.error(f"Failed to delete message: {e}")
+        else:
+            logger.info(f"✅ Content approved: {user.full_name} ({user.id})")
+
+    except Exception as e:
+        logger.error(f"Error processing message: {e}", exc_info=True)
+    finally:
+        # Cleanup temporary files
+        for file_path in media_files:
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    logger.error(f"Failed to clean up {file_path}: {e}")
+
+        # Log performance
+        proc_time = time.time() - start_time
+        logger.info(f"⏱️ Processing time: {proc_time:.2f}s")
+        if proc_time > 5.0:
+            logger.warning(f"Slow processing detected: {proc_time:.2f}s")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
@@ -135,30 +125,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "I automatically detect and remove:\n"
         "• Explicit 18+ content\n"
         "• Child exploitation material\n"
-        "• Violent/graphic content\n\n"
-        "Admins can use /detectsticker to analyze stickers"
+        "• Violent/graphic content\n"
+        "• Drug-related material\n\n"
+        "Normal stickers and images are never deleted!"
     )
 
 def main():
     """Start the bot"""
+    # Verify environment
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN environment variable is not set!")
         return
-    
+
     app = Application.builder().token(BOT_TOKEN).build()
-    
+
+    # Check FFmpeg availability
+    if not is_ffmpeg_available():
+        logger.warning("⚠️ FFmpeg not installed! Video processing disabled.")
+    else:
+        logger.info("✅ FFmpeg available for video processing")
+
     # Add handlers
     app.add_handler(MessageHandler(
         filters.PHOTO | filters.Sticker.ALL,
         handle_message
     ))
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("detectsticker", detect_sticker))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    
+
     logger.info("🤖 Bot is starting...")
-    logger.info(f"🔍 Using policy: Explicit threshold={policy.explicit_threshold}")
-    
+    logger.info(f"🔍 Using policy: "
+                f"Explicit threshold={policy.explicit_threshold}, "
+                f"Partial nudity threshold={policy.partial_nudity_threshold}")
+
     try:
         app.run_polling(drop_pending_updates=True)
     except Exception as e:
