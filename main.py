@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import time  # Added for performance monitoring
 from dotenv import load_dotenv
 load_dotenv()
 from telegram import Update
@@ -28,7 +29,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle incoming messages with enhanced media processing"""
+    """Handle messages with performance optimizations"""
+    start_time = time.time()
     message = update.effective_message
     user = message.from_user
     
@@ -38,14 +40,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     media_files = []
     try:
-        # Process media (returns list of image paths)
-        media_files = await process_media(message, context.bot)
-        if not media_files:
-            logger.warning("Media processing failed or returned no files")
+        # Process media with timeout
+        try:
+            media_files = await asyncio.wait_for(
+                process_media(message, context.bot),
+                timeout=15
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Media processing timed out")
             return
         
-        # Classify content
-        content_result = await classify_content(media_files)
+        if not media_files:
+            logger.debug("Media processing returned no files")
+            return
+        
+        # Classify content with timeout
+        try:
+            content_result = await asyncio.wait_for(
+                classify_content(media_files),
+                timeout=20
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Classification timed out")
+            return
         
         # Apply content policy
         if policy.should_delete(content_result):
@@ -86,13 +103,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     os.remove(file_path)
                 except Exception as e:
                     logger.error(f"Failed to clean up {file_path}: {e}")
+        
+        # Log performance
+        proc_time = time.time() - start_time
+        logger.info(f"⏱️ Processing time: {proc_time:.2f}s")
+        if proc_time > 5.0:
+            logger.warning(f"Slow processing detected: {proc_time:.2f}s")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     await update.message.reply_text(
         "🛡️ Advanced Auto-Moderation Bot is active!\n\n"
         "I automatically detect and remove:\n"
-        "• Expliciiit 18+ content\n"
+        "• Explicit 18+ content\n"
         "• Child exploitation material\n"
         "• Violent/graphic content\n"
         "• Drug-related material\n\n"
@@ -118,7 +141,7 @@ def main():
     logger.info("🤖 Bot is starting...")
     logger.info(f"🔍 Using policy: "
                f"Explicit threshold={policy.explicit_threshold}, "
-               f"Child abuse threshold={policy.child_abuse_threshold}")
+               f"Partial nudity threshold={policy.partial_nudity_threshold}")
     
     try:
         app.run_polling(drop_pending_updates=True)
