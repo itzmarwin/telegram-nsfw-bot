@@ -9,42 +9,34 @@ from nudenet import NudeDetector
 
 logger = logging.getLogger(__name__)
 
-# Initialize detector with aggressive settings
+# Initialize detector
 detector = NudeDetector()
 
-# Comprehensive prohibited patterns with hentai-specific terms
+# Refined prohibited patterns
 PROHIBITED_PATTERNS = {
     "explicit": [
-        r"exposed_genitalia", r"genitalia", r"breast", r"anus", 
-        r"penis", r"vagina", r"pussy", r"clitoris", r"buttocks", r"ass",
-        r"intercourse", r"sex", r"bdsm", r"fetish", r"insertion", r"oral",
-        r"pubic_hair", r"naked", r"nude", r"exposed_breast", r"exposed_anus",
-        r"dick", r"cock", r"balls", r"tits", r"boobs", r"nipples", r"hentai",
-        r"porn", r"cum", r"ejaculation", r"erection", r"blowjob", r"handjob",
-        r"masturbation", r"orgasm", r"sex_toy", r"dildo", r"vibrator"
+        r"exposed_genitalia", r"genitalia", r"breast", 
+        r"penis", r"vagina", r"buttocks", r"ass",
+        r"intercourse", r"sex", r"bdsm", r"insertion",
+        r"pubic_hair", r"exposed_breast", r"exposed_anus",
     ],
     "partial_nudity": [
-        r"covered_genitalia", r"covered_breast", r"lingerie", r"underwear",
-        r"bikini", r"cleavage", r"cameltoe", r"bulge", r"seductive", 
-        r"provocative", r"suggestive", r"partial_nudity", r"see_through",
-        r"wet_clothing", r"undressing", r"close_up_genitalia", r"thong",
-        r"g-string", r"bra", r"panties", r"half_naked", r"half_nude",
-        r"side_boob", r"underboob", r"areola", r"crotch", r"butt_crack"
+        r"covered_genitalia", r"covered_breast", r"lingerie",
+        r"bikini", r"cleavage", r"partial_nudity",
+        r"see_through", r"underwear"
     ],
     "child_abuse": [
         r"child", r"minor", r"teen", r"underage", r"loli", r"shota", 
-        r"school", r"youth", r"adolescent", r"toddler", r"infant",
-        r"juvenile", r"young_girl", r"young_boy", r"childlike"
+        r"school", r"youth", r"adolescent"
     ],
     "violence": [
         r"gun", r"knife", r"weapon", r"blood", r"gore", r"torture", 
-        r"abuse", r"hit", r"fight", r"injury", r"wound", r"brutality",
-        r"assault", r"murder", r"suicide", r"self_harm"
+        r"abuse", r"hit", r"fight", r"injury", r"wound", r"brutality"
     ]
 }
 
 def enhance_hentai_detection(image_path: str):
-    """Specialized enhancement for hentai/partial nudity"""
+    """Optimized enhancement for detection"""
     try:
         img = cv2.imread(image_path)
         if img is None:
@@ -53,22 +45,14 @@ def enhance_hentai_detection(image_path: str):
         # Convert to HSV color space
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         
-        # Increase saturation for anime colors
+        # Moderate saturation increase
         h, s, v = cv2.split(hsv)
-        s = cv2.add(s, 50)
+        s = cv2.add(s, 30)
         s = np.clip(s, 0, 255)
         hsv = cv2.merge([h, s, v])
         
         # Convert back to BGR
         enhanced = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-        
-        # Apply anime-style edge enhancement
-        gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 50, 150)
-        edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        enhanced = cv2.addWeighted(enhanced, 0.8, edges, 0.2, 0)
-        
-        # Save enhanced image
         cv2.imwrite(image_path, enhanced)
         return True
     except Exception as e:
@@ -76,7 +60,7 @@ def enhance_hentai_detection(image_path: str):
         return False
 
 def detect_skin_ratio(image_path: str) -> float:
-    """Calculate skin pixel ratio for partial nudity detection"""
+    """More accurate skin detection"""
     try:
         img = cv2.imread(image_path)
         if img is None:
@@ -85,12 +69,17 @@ def detect_skin_ratio(image_path: str) -> float:
         # Convert to HSV
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         
-        # Define skin color range (tuned for anime)
-        lower_skin = np.array([0, 30, 60], dtype=np.uint8)
-        upper_skin = np.array([20, 150, 255], dtype=np.uint8)
+        # Narrower skin color range
+        lower_skin = np.array([0, 40, 70], dtype=np.uint8)
+        upper_skin = np.array([25, 180, 255], dtype=np.uint8)
         
         # Create skin mask
         mask = cv2.inRange(hsv, lower_skin, upper_skin)
+        
+        # Apply morphological operations to reduce noise
+        kernel = np.ones((5,5), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
         
         # Calculate skin percentage
         skin_pixels = cv2.countNonZero(mask)
@@ -101,22 +90,27 @@ def detect_skin_ratio(image_path: str) -> float:
         return 0.0
 
 async def classify_content(image_paths: list) -> dict:
-    """Advanced classification with hentai/partial nudity focus"""
+    """Optimized classification with reduced false positives"""
     if not image_paths:
         return {
             "max_explicit": 0,
             "max_partial_nudity": 0,
             "max_child_abuse": 0,
             "max_violence": 0,
-            "skin_ratio": 0,
+            "avg_skin_ratio": 0,
             "error": "No images provided"
         }
+    
+    # Process only first 2 images to save time
+    if len(image_paths) > 2:
+        image_paths = image_paths[:2]
     
     results = []
     for path in image_paths:
         try:
-            # Apply hentai-specific enhancement
-            enhance_hentai_detection(path)
+            # Only enhance zoomed/frame images
+            if "_zoom" in path or "_frame" in path:
+                enhance_hentai_detection(path)
             
             start_time = time.time()
             
@@ -127,13 +121,13 @@ async def classify_content(image_paths: list) -> dict:
                 lambda: detector.detect(path)
             )
             
-            # Calculate skin ratio for partial nudity
+            # Calculate skin ratio
             skin_ratio = detect_skin_ratio(path)
             
-            # Calculate scores based on patterns
+            # Calculate scores
             scores = {
                 "explicit": 0.0,
-                "partial_nudity": skin_ratio * 0.5,  # Start with skin ratio
+                "partial_nudity": skin_ratio * 0.3,  # Reduced weight
                 "child_abuse": 0.0,
                 "violence": 0.0
             }
@@ -144,7 +138,7 @@ async def classify_content(image_paths: list) -> dict:
                 class_name = obj['class']
                 confidence = obj['score']
                 
-                # Track all detected objects
+                # Track detected objects
                 detected_objects[class_name] = max(
                     detected_objects.get(class_name, 0),
                     confidence
@@ -158,14 +152,10 @@ async def classify_content(image_paths: list) -> dict:
                             if confidence > scores[category]:
                                 scores[category] = confidence
             
-            # Special handling for partial nudity
-            if scores["explicit"] > 0.1 or "hentai" in path.lower():
-                scores["partial_nudity"] = min(scores["partial_nudity"] * 1.5, 1.0)
-            
-            # Boost scores for stickers
-            if "sticker" in path.lower():
-                for category in scores:
-                    scores[category] = min(scores[category] * 1.4, 1.0)
+            # Remove sticker score boost
+            # Special case for popular sticker types
+            if "popular" in path.lower() or "meme" in path.lower():
+                scores["partial_nudity"] *= 0.6
             
             results.append({
                 "scores": scores,
@@ -187,7 +177,7 @@ async def classify_content(image_paths: list) -> dict:
             "max_partial_nudity": 0,
             "max_child_abuse": 0,
             "max_violence": 0,
-            "skin_ratio": 0,
+            "avg_skin_ratio": 0,
             "error": "All classifications failed"
         }
     
