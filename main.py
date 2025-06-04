@@ -2,8 +2,11 @@ import os
 import logging
 import asyncio
 import time  # Added for performance monitoring
+import shutil  # Needed for checking ffmpeg
+
 from dotenv import load_dotenv
 load_dotenv()
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -12,13 +15,14 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
+
 from media_processor import process_media
 from nudenet_wrapper import classify_content
 from content_policy import policy
-import shutil  # Already imported time, dotenv, etc.
 
+# 🔧 Check if ffmpeg is available
 def is_ffmpeg_available():
-    return shutil.which("ffmpeg") is not None
+    return shutil.which("ffmpeg") is not None
 
 # Bot configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -37,11 +41,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     start_time = time.time()
     message = update.effective_message
     user = message.from_user
-    
+
     # Skip if no processable media
     if not (message.photo or message.sticker):
         return
-    
+
     media_files = []
     try:
         # Process media with timeout
@@ -53,11 +57,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except asyncio.TimeoutError:
             logger.warning("Media processing timed out")
             return
-        
+
         if not media_files:
             logger.debug("Media processing returned no files")
             return
-        
+
         # Classify content with timeout
         try:
             content_result = await asyncio.wait_for(
@@ -67,7 +71,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except asyncio.TimeoutError:
             logger.warning("Classification timed out")
             return
-        
+
         # Apply content policy
         if policy.should_delete(content_result):
             try:
@@ -79,7 +83,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"CA={content_result.get('max_child_abuse', 0):.2f}, "
                     f"V={content_result.get('max_violence', 0):.2f}"
                 )
-                
+
                 # Send warning to user
                 try:
                     warning = await message.reply_text(
@@ -91,12 +95,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await warning.delete()
                 except Exception as e:
                     logger.error(f"Failed to send warning: {e}")
-                    
+
             except Exception as e:
                 logger.error(f"Failed to delete message: {e}")
         else:
             logger.info(f"✅ Content approved: {user.full_name} ({user.id})")
-            
+
     except Exception as e:
         logger.error(f"Error processing message: {e}", exc_info=True)
     finally:
@@ -107,7 +111,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     os.remove(file_path)
                 except Exception as e:
                     logger.error(f"Failed to clean up {file_path}: {e}")
-        
+
         # Log performance
         proc_time = time.time() - start_time
         logger.info(f"⏱️ Processing time: {proc_time:.2f}s")
@@ -132,7 +136,7 @@ def main():
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN environment variable is not set!")
         return
-    
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     # Check FFmpeg availability
@@ -140,19 +144,19 @@ def main():
         logger.warning("⚠️ FFmpeg not installed! Video processing disabled.")
     else:
         logger.info("✅ FFmpeg available for video processing")
-    
+
     # Add handlers
     app.add_handler(MessageHandler(
         filters.PHOTO | filters.Sticker.ALL,
         handle_message
     ))
     app.add_handler(CommandHandler("start", start))
-    
+
     logger.info("🤖 Bot is starting...")
     logger.info(f"🔍 Using policy: "
-               f"Explicit threshold={policy.explicit_threshold}, "
-               f"Partial nudity threshold={policy.partial_nudity_threshold}")
-    
+                f"Explicit threshold={policy.explicit_threshold}, "
+                f"Partial nudity threshold={policy.partial_nudity_threshold}")
+
     try:
         app.run_polling(drop_pending_updates=True)
     except Exception as e:
