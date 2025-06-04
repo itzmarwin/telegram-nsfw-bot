@@ -15,6 +15,10 @@ from telegram.ext import (
 from media_processor import process_media
 from nudenet_wrapper import classify_content
 from content_policy import policy
+import shutil  # Already imported time, dotenv, etc.
+
+def is_ffmpeg_available():
+    return shutil.which("ffmpeg") is not None
 
 # Bot configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
