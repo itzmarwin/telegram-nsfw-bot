@@ -316,7 +316,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Broadcast cancelled.")
     
     # Help button handler
-    elif query.data == "help":
+   elif query.data == "help":
     help_text = (
         "🛡️ **Shiro SafeBot Commands** 🛡️\n\n"
         "**For Everyone:**\n"
