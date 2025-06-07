@@ -1,7 +1,7 @@
 import os
 import logging
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+from pymongo.errors import ConnectionFailure, OperationFailure
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,10 @@ class Database:
             logger.error(f"❌ MongoDB connection failed: {e}")
             self.client = None
             self.db = None
+        except Exception as e:
+            logger.error(f"Database connection error: {e}")
+            self.client = None
+            self.db = None
     
     def is_connected(self):
         return self.client is not None and self.db is not None
@@ -33,23 +37,41 @@ class Database:
             return False
         
         users = self.db.users
-        user_data = {
-            "_id": user_id,
-            "username": username,
-            "first_name": first_name,
-            "last_name": last_name,
-            "is_bot": False,
-            "start_count": 1
-        }
         
         try:
-            result = users.update_one(
-                {"_id": user_id},
-                {"$set": user_data, "$inc": {"start_count": 1}},
-                upsert=True
-            )
+            # Check if user already exists
+            existing_user = users.find_one({"_id": user_id})
+            
+            if existing_user:
+                # Update existing user
+                users.update_one(
+                    {"_id": user_id},
+                    {
+                        "$set": {
+                            "username": username,
+                            "first_name": first_name,
+                            "last_name": last_name
+                        },
+                        "$inc": {"start_count": 1}
+                    }
+                )
+            else:
+                # Create new user
+                user_data = {
+                    "_id": user_id,
+                    "username": username,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "is_bot": False,
+                    "start_count": 1
+                }
+                users.insert_one(user_data)
+                
             logger.info(f"Added/updated user: {user_id} ({first_name} {last_name})")
             return True
+        except OperationFailure as e:
+            logger.error(f"Database operation failed: {e}")
+            return False
         except Exception as e:
             logger.error(f"Failed to add user: {e}")
             return False
@@ -60,20 +82,31 @@ class Database:
             return False
         
         groups = self.db.groups
-        group_data = {
-            "_id": chat_id,
-            "title": title,
-            "bot_added": True
-        }
         
         try:
-            result = groups.update_one(
-                {"_id": chat_id},
-                {"$set": group_data},
-                upsert=True
-            )
+            # Check if group already exists
+            existing_group = groups.find_one({"_id": chat_id})
+            
+            if existing_group:
+                # Update existing group
+                groups.update_one(
+                    {"_id": chat_id},
+                    {"$set": {"title": title}}
+                )
+            else:
+                # Create new group
+                group_data = {
+                    "_id": chat_id,
+                    "title": title,
+                    "bot_added": True
+                }
+                groups.insert_one(group_data)
+                
             logger.info(f"Added/updated group: {chat_id} ({title})")
             return True
+        except OperationFailure as e:
+            logger.error(f"Database operation failed: {e}")
+            return False
         except Exception as e:
             logger.error(f"Failed to add group: {e}")
             return False
@@ -94,6 +127,24 @@ class Database:
         except Exception as e:
             logger.error(f"Failed to get stats: {e}")
             return {"users": 0, "groups": 0}
+    
+    def get_all_user_ids(self):
+        if self.db is None:
+            return []
+        try:
+            return [user["_id"] for user in self.db.users.find({}, {"_id": 1})]
+        except Exception as e:
+            logger.error(f"Failed to get user IDs: {e}")
+            return []
+    
+    def get_all_group_ids(self):
+        if self.db is None:
+            return []
+        try:
+            return [group["_id"] for group in self.db.groups.find({"bot_added": True}, {"_id": 1})]
+        except Exception as e:
+            logger.error(f"Failed to get group IDs: {e}")
+            return []
     
     def add_sudo(self, user_id: int, username: str, first_name: str, last_name: str):
         if self.db is None:
