@@ -149,11 +149,25 @@ async def new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat = update.effective_chat
         logger.info(f"🤖 Bot added to group: {chat.title} ({chat.id})")
         
+        # Add group to database
         if db.is_connected():
             db.add_group(
                 chat_id=chat.id,
                 title=chat.title
             )
+            
+        # Send welcome message
+        welcome_text = (
+            "🌸 Hello everyone! I'm Shiro SafeBot! 🌸\n\n"
+            "I'm here to keep this group clean and safe by automatically deleting NSFW content!\n"
+            "Just make me an admin with delete permissions, and I'll do the rest!\n"
+            "Stay safe, stay happy! ✨🐰"
+        )
+        
+        try:
+            await update.message.reply_text(welcome_text)
+        except Exception as e:
+            logger.error(f"Failed to send group welcome: {e}")
 
 def main():
     """Start the bot"""
