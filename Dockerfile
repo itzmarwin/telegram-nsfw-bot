@@ -24,6 +24,7 @@ COPY . .
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV BOT_TOKEN="your_bot_token_here"
+ENV MONGO_URI="mongodb://mongo:27017"  # Added MongoDB
 
 # Run the bot
 CMD ["python", "main.py"]
