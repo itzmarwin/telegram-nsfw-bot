@@ -70,7 +70,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         # Row 3: Developer and Support
         [
-            InlineKeyboardButton("𝗗𝗲𝘃", 
+            InlineKeyboardButton("𝗗𝗲𝘃𝗲𝗹𝗼𝗽𝗲𝗿", 
                                  url="https://t.me/Itz_Marv1n"),
             InlineKeyboardButton("𝗦𝘂𝗽𝗽𝗼𝗿𝘁", 
                                  url="https://t.me/Anime_Group_chat_en")
@@ -364,15 +364,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Recreate original buttons
         keyboard = [
-            [InlineKeyboardButton("➕ Add me to your Group", 
-                                  url="https://t.me/your_bot_username?startgroup=true")],
-            [InlineKeyboardButton("❓ Help & Commands", callback_data="help"),
-             InlineKeyboardButton("📢 Updates Channel", 
-                                  url="https://t.me/your_updates_channel")],
-            [InlineKeyboardButton("👨‍💻 Developer", 
-                                  url="https://t.me/your_dev_username"),
-             InlineKeyboardButton("👥 Support Group", 
-                                  url="https://t.me/your_support_group")]
+            [InlineKeyboardButton("𝗔𝗗𝗗 𝗠𝗘 𝗧𝗢 𝗬𝗢𝗨𝗥 𝗚𝗥𝗢𝗨𝗣", 
+                                  url="https://t.me/shirosafebot?startgroup=true")],
+            [InlineKeyboardButton("𝗛𝗲𝗹𝗽 & 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀", callback_data="help"),
+             InlineKeyboardButton("𝗨𝗽𝗱𝗮𝘁𝗲𝘀", 
+                                  url="https://t.me/Samurais_network")],
+            [InlineKeyboardButton("𝗗𝗲𝘃𝗲𝗹𝗼𝗽𝗲𝗿", 
+                                  url="https://t.me/itz_marv1n"),
+             InlineKeyboardButton("𝗦𝘂𝗽𝗽𝗼𝗿𝘁", 
+                                  url="https://t.me/Anime_group_chat_en")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
