@@ -59,21 +59,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Row 1: Single "Add to Group" button
         [
             InlineKeyboardButton("➕ Add me to your Group", 
-                                 url="https://t.me/your_bot_username?startgroup=true")
+                                 url="https://t.me/ShiroSafebot?startgroup=true")
         ],
         # Row 2: Help & Commands and Updates
         [
             InlineKeyboardButton("❓ Help & Commands", 
                                  callback_data="help"),
             InlineKeyboardButton("📢 Updates Channel", 
-                                 url="https://t.me/your_updates_channel")
+                                 url="https://t.me/samurais_network")
         ],
         # Row 3: Developer and Support
         [
             InlineKeyboardButton("👨‍💻 Developer", 
-                                 url="https://t.me/your_dev_username"),
+                                 url="https://t.me/Itz_Marv1n"),
             InlineKeyboardButton("👥 Support Group", 
-                                 url="https://t.me/your_support_group")
+                                 url="https://t.me/Anime_Group_chat_en")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
