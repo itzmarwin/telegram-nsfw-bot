@@ -89,14 +89,19 @@ class Database:
             logger.error(f"Failed to get stats: {e}")
             return {"users": 0, "groups": 0}
     
-    def add_sudo(self, user_id: int):
+    def add_sudo(self, user_id: int, username: str, first_name: str, last_name: str):
         if self.db is None:
             return False
         
         try:
             self.db.sudo_users.update_one(
                 {"_id": user_id},
-                {"$set": {"_id": user_id}},
+                {"$set": {
+                    "_id": user_id,
+                    "username": username,
+                    "first_name": first_name,
+                    "last_name": last_name
+                }},
                 upsert=True
             )
             return True
@@ -120,7 +125,7 @@ class Database:
             return []
         
         try:
-            return [doc["_id"] for doc in self.db.sudo_users.find({})]
+            return list(self.db.sudo_users.find({}))
         except Exception as e:
             logger.error(f"Failed to get sudo list: {e}")
             return []
