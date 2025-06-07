@@ -25,10 +25,10 @@ class Database:
             self.db = None
     
     def is_connected(self):
-        return self.client is not None
+        return self.client is not None and self.db is not None
     
     def add_user(self, user_id: int, username: str, first_name: str, last_name: str):
-        if not self.db:
+        if self.db is None:
             return False
         
         users = self.db.users
@@ -53,7 +53,7 @@ class Database:
             return False
     
     def add_group(self, chat_id: int, title: str):
-        if not self.db:
+        if self.db is None:
             return False
         
         groups = self.db.groups
@@ -75,8 +75,8 @@ class Database:
             return False
     
     def get_stats(self):
-        if not self.db:
-            return {}
+        if self.db is None:
+            return {"users": 0, "groups": 0}
         
         try:
             user_count = self.db.users.count_documents({})
@@ -90,7 +90,7 @@ class Database:
             return {"users": 0, "groups": 0}
     
     def add_sudo(self, user_id: int):
-        if not self.db:
+        if self.db is None:
             return False
         
         try:
@@ -105,7 +105,7 @@ class Database:
             return False
     
     def remove_sudo(self, user_id: int):
-        if not self.db:
+        if self.db is None:
             return False
         
         try:
@@ -116,7 +116,7 @@ class Database:
             return False
     
     def get_sudo_list(self):
-        if not self.db:
+        if self.db is None:
             return []
         
         try:
@@ -126,7 +126,7 @@ class Database:
             return []
     
     def is_sudo(self, user_id: int):
-        if not self.db:
+        if self.db is None:
             return False
         
         try:
