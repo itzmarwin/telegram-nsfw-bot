@@ -159,7 +159,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def addsudo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Add a sudo user"""
+    """Add a sudo user with reply support"""
     user = update.effective_user
     message = update.message
     
@@ -168,22 +168,33 @@ async def addsudo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("🚫 Only the owner can add sudo users.")
         return
     
+    # Support replying to messages
+    target_user = None
+    if message.reply_to_message:
+        target_user = message.reply_to_message.from_user
+    
     # Check if user ID is provided
-    if not context.args:
-        await message.reply_text("ℹ️ Usage: /addsudo <user_id>")
+    if not context.args and not target_user:
+        await message.reply_text("ℹ️ Usage: /addsudo <user_id> OR reply to a user's message")
         return
     
     try:
-        user_id = int(context.args[0])
-        if db.add_sudo(user_id):
-            await message.reply_text(f"✅ User {user_id} added to sudo list.")
+        user_id = target_user.id if target_user else int(context.args[0])
+        
+        # Get user details
+        username = target_user.username if target_user else None
+        first_name = target_user.first_name if target_user else "Unknown"
+        last_name = target_user.last_name if target_user else ""
+        
+        if db.add_sudo(user_id, username, first_name, last_name):
+            await message.reply_text(f"✅ User {first_name} (@{username}) added to sudo list.")
         else:
             await message.reply_text("❌ Failed to add user to sudo list.")
-    except ValueError:
+    except (ValueError, TypeError):
         await message.reply_text("❌ Invalid user ID. Please provide a numeric ID.")
 
 async def rmsudo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Remove a sudo user"""
+    """Remove a sudo user with reply support"""
     user = update.effective_user
     message = update.message
     
@@ -192,22 +203,28 @@ async def rmsudo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("🚫 Only the owner can remove sudo users.")
         return
     
+    # Support replying to messages
+    target_user = None
+    if message.reply_to_message:
+        target_user = message.reply_to_message.from_user
+    
     # Check if user ID is provided
-    if not context.args:
-        await message.reply_text("ℹ️ Usage: /rmsudo <user_id>")
+    if not context.args and not target_user:
+        await message.reply_text("ℹ️ Usage: /rmsudo <user_id> OR reply to a user's message")
         return
     
     try:
-        user_id = int(context.args[0])
+        user_id = target_user.id if target_user else int(context.args[0])
+        
         if db.remove_sudo(user_id):
-            await message.reply_text(f"✅ User {user_id} removed from sudo list.")
+            await message.reply_text(f"✅ User removed from sudo list.")
         else:
             await message.reply_text("❌ User not found in sudo list.")
-    except ValueError:
+    except (ValueError, TypeError):
         await message.reply_text("❌ Invalid user ID. Please provide a numeric ID.")
 
 async def sudolist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """List all sudo users"""
+    """List all sudo users with names"""
     user = update.effective_user
     message = update.message
     
@@ -221,11 +238,24 @@ async def sudolist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("ℹ️ No sudo users found.")
         return
     
-    response = "👑 <b>Sudo Users:</b>\n\n" + "\n".join(f"• <code>{user_id}</code>" for user_id in sudo_list)
+    response_lines = []
+    for sudo in sudo_list:
+        name_line = f"• {sudo.get('first_name', '')} {sudo.get('last_name', '')}".strip()
+        if not name_line:
+            name_line = "Unknown User"
+            
+        user_line = name_line
+        if sudo.get('username'):
+            user_line += f" (@{sudo['username']})"
+            
+        user_line += f" - <code>{sudo['_id']}</code>"
+        response_lines.append(user_line)
+    
+    response = "👑 <b>Sudo Users:</b>\n\n" + "\n".join(response_lines)
     await message.reply_text(response, parse_mode="HTML")
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle button callbacks"""
+    """Handle button callbacks with proper message editing"""
     query = update.callback_query
     await query.answer()
     
@@ -243,8 +273,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Edit confirmation message
         await query.edit_message_text(f"📢 Broadcasting to {total} recipients...")
         
-        # Actual broadcast would go here (implementation skipped for brevity)
-        # In real implementation, you'd loop through all users and groups
+        # Actual broadcast would go here
+        # Implementation would loop through all users/groups
         # and send the message with error handling
         
         await query.edit_message_text(f"✅ Broadcast completed to {total} recipients!")
@@ -267,7 +297,48 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/sudolist - List all sudo users\n\n"
             "✨ I automatically moderate groups by deleting NSFW content!"
         )
+        
+        # Create back button
+        keyboard = [
+            [InlineKeyboardButton("🔙 Back", callback_data="back_to_start")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Edit message to show help
         await query.edit_message_text(
             help_text,
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+    
+    # Back to start button
+    elif query.data == "back_to_start":
+        # Recreate original welcome message
+        user = query.from_user
+        welcome_text = (
+            f"🌸 Hello, {user.first_name}! I'm Shiro SafeBot! 🌸\n\n"
+            "I'm here to keep your group clean and safe by deleting all NSFW stickers and images!\n"
+            "Let's make your chats nice and comfy for everyone! ✨🐾\n\n"
+            "Just add me as admin, and I'll do the rest!\n"
+            "Stay safe, stay happy! ✨🐰"
+        )
+        
+        # Recreate original buttons
+        keyboard = [
+            [InlineKeyboardButton("➕ Add me to your Group", 
+                                  url="https://t.me/your_bot_username?startgroup=true")],
+            [InlineKeyboardButton("❓ Help & Commands", callback_data="help"),
+             InlineKeyboardButton("📢 Updates Channel", 
+                                  url="https://t.me/your_updates_channel")],
+            [InlineKeyboardButton("👨‍💻 Developer", 
+                                  url="https://t.me/your_dev_username"),
+             InlineKeyboardButton("👥 Support Group", 
+                                  url="https://t.me/your_support_group")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Edit message back to start
+        await query.edit_message_text(
+            welcome_text,
+            reply_markup=reply_markup
         )
