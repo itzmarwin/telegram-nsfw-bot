@@ -272,16 +272,50 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Edit confirmation message
         await query.edit_message_text(f"📢 Broadcasting to {total} recipients...")
         
-        # Actual broadcast would go here
-        # Implementation would loop through all users/groups
-        # and send the message with error handling
+        # Get all user IDs and group IDs
+        user_ids = db.get_all_user_ids()
+        group_ids = db.get_all_group_ids()
         
-        await query.edit_message_text(f"✅ Broadcast completed to {total} recipients!")
+        # Initialize counters
+        success = 0
+        failed = 0
+        
+        # Send to users
+        for user_id in user_ids:
+            try:
+                await context.bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=message.chat_id,
+                    message_id=message.message_id
+                )
+                success += 1
+            except Exception as e:
+                logger.error(f"Failed to send broadcast to user {user_id}: {e}")
+                failed += 1
+        
+        # Send to groups
+        for group_id in group_ids:
+            try:
+                await context.bot.copy_message(
+                    chat_id=group_id,
+                    from_chat_id=message.chat_id,
+                    message_id=message.message_id
+                )
+                success += 1
+            except Exception as e:
+                logger.error(f"Failed to send broadcast to group {group_id}: {e}")
+                failed += 1
+        
+        await query.edit_message_text(
+            f"✅ Broadcast completed!\n"
+            f"• Successfully sent: {success}\n"
+            f"• Failed to send: {failed}"
+        )
     
     elif query.data == "broadcast_cancel":
         await query.edit_message_text("❌ Broadcast cancelled.")
     
-    # Help button handler - send as new message to avoid photo editing issues
+    # Help button handler
     elif query.data == "help":
         help_text = (
             "🛡️ <b>Shiro SafeBot Commands</b> 🛡️\n\n"
@@ -303,12 +337,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Send as new message instead of editing
-        await query.message.reply_text(
-            help_text,
-            parse_mode="HTML",
-            reply_markup=reply_markup
-        )
+        # Edit the original start message to show help
+        try:
+            await query.edit_message_caption(
+                caption=help_text,
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            # Fallback for text messages
+            await query.edit_message_text(
+                help_text,
+                reply_markup=reply_markup
+            )
     
     # Back to start button
     elif query.data == "back_to_start":
@@ -336,14 +376,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Send as new message
-        await query.message.reply_text(
-            welcome_text,
-            reply_markup=reply_markup
-        )
-        
-        # Delete the help message
+        # Edit back to start
         try:
-            await query.message.delete()
-        except Exception as e:
-            logger.error(f"Error deleting message: {e}")
+            # For photo messages
+            await query.edit_message_caption(
+                caption=welcome_text,
+                reply_markup=reply_markup
+            )
+        except:
+            # For text messages
+            await query.edit_message_text(
+                welcome_text,
+                reply_markup=reply_markup
+            )
