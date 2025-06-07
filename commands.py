@@ -329,7 +329,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/rmsudo [user_id] - Remove sudo user\n"
         "/sudolist - List all sudo users\n\n"
         "✨ I automatically moderate groups by deleting NSFW content!"
-    )
+               )
     await query.message.edit_text(help_text, parse_mode="markdown")
         
         # Create back button
