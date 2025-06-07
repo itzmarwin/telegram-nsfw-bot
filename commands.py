@@ -318,13 +318,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Help button handler
     elif query.data == "help":
         help_text = (
-            "🛡️ <b>Shiro SafeBot Commands</b> 🛡️\n\n"
-            "<b>For Everyone:</b>\n"
+            "🛡️ **Shiro SafeBot Commands** 🛡️\n\n"
+            "**For Everyone:**\n"
             "/start - Show welcome message\n\n"
-            "<b>For Admins:</b>\n"
+            "**For Admins:**\n"
             "/stats - Show bot statistics\n"
             "/broadcast - Send message to all users (reply to message)\n\n"
-            "<b>For Owner:</b>\n"
+            "**For Owner:**\n"
             "/addsudo [user_id] - Add sudo user\n"
             "/rmsudo [user_id] - Remove sudo user\n"
             "/sudolist - List all sudo users\n\n"
