@@ -20,8 +20,8 @@ from telegram.ext import (
 from media_processor import process_media
 from nudenet_wrapper import classify_content
 from content_policy import policy
-from database import db  # Database integration
-from commands import (  # Command handlers
+from database import db
+from commands import (
     start_command,
     stats_command,
     broadcast_command,
@@ -139,6 +139,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if proc_time > 5.0:
             logger.warning(f"Slow processing detected: {proc_time:.2f}s")
 
+async def new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle bot being added to a group"""
+    new_members = update.message.new_chat_members
+    bot_id = context.bot.id
+    
+    # Check if bot was added
+    if any(member.id == bot_id for member in new_members):
+        chat = update.effective_chat
+        logger.info(f"🤖 Bot added to group: {chat.title} ({chat.id})")
+        
+        if db.is_connected():
+            db.add_group(
+                chat_id=chat.id,
+                title=chat.title
+            )
+
 def main():
     """Start the bot"""
     # Verify environment
@@ -179,6 +195,12 @@ def main():
     app.add_handler(MessageHandler(
         filters.PHOTO | filters.Sticker.ALL,
         handle_message
+    ))
+    
+    # Handler for bot being added to groups
+    app.add_handler(MessageHandler(
+        filters.StatusUpdate.NEW_CHAT_MEMBERS,
+        new_chat_members
     ))
 
     logger.info("🤖 Bot is starting...")
