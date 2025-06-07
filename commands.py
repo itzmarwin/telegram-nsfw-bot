@@ -317,19 +317,20 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Help button handler
     elif query.data == "help":
-        help_text = (
-            "🛡️ **Shiro SafeBot Commands** 🛡️\n\n"
-            "**For Everyone:**\n"
-            "/start - Show welcome message\n\n"
-            "**For Admins:**\n"
-            "/stats - Show bot statistics\n"
-            "/broadcast - Send message to all users (reply to message)\n\n"
-            "**For Owner:**\n"
-            "/addsudo [user_id] - Add sudo user\n"
-            "/rmsudo [user_id] - Remove sudo user\n"
-            "/sudolist - List all sudo users\n\n"
-            "✨ I automatically moderate groups by deleting NSFW content!"
-        )
+    help_text = (
+        "🛡️ **Shiro SafeBot Commands** 🛡️\n\n"
+        "**For Everyone:**\n"
+        "/start - Show welcome message\n\n"
+        "**For Admins:**\n"
+        "/stats - Show bot statistics\n"
+        "/broadcast - Send message to all users (reply to message)\n\n"
+        "**For Owner:**\n"
+        "/addsudo [user_id] - Add sudo user\n"
+        "/rmsudo [user_id] - Remove sudo user\n"
+        "/sudolist - List all sudo users\n\n"
+        "✨ I automatically moderate groups by deleting NSFW content!"
+    )
+    await query.message.edit_text(help_text, parse_mode="markdown")
         
         # Create back button
         keyboard = [
