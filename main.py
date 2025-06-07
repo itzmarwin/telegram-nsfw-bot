@@ -1,8 +1,8 @@
 import os
 import logging
 import asyncio
-import time  # Added for performance monitoring
-import shutil  # Needed for checking ffmpeg
+import time
+import shutil
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -12,6 +12,7 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
     ContextTypes
 )
@@ -19,13 +20,20 @@ from telegram.ext import (
 from media_processor import process_media
 from nudenet_wrapper import classify_content
 from content_policy import policy
-
-# 🔧 Check if ffmpeg is available
-def is_ffmpeg_available():
-    return shutil.which("ffmpeg") is not None
+from database import db  # Database integration
+from commands import (  # Command handlers
+    start_command,
+    stats_command,
+    broadcast_command,
+    addsudo_command,
+    rmsudo_command,
+    sudolist_command,
+    callback_handler
+)
 
 # Bot configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID", 0))
 ADMIN_IDS = [int(id) for id in os.getenv("ADMIN_IDS", "").split(",") if id]
 
 # Configure logging
@@ -36,11 +44,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def is_ffmpeg_available():
+    """Check if FFmpeg is installed"""
+    return shutil.which("ffmpeg") is not None
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle messages with performance optimizations"""
     start_time = time.time()
     message = update.effective_message
     user = message.from_user
+    chat = update.effective_chat
+
+    # Track group in database
+    if chat.type in ["group", "supergroup"]:
+        if db.is_connected():
+            db.add_group(
+                chat_id=chat.id,
+                title=chat.title
+            )
 
     # Skip if no processable media
     if not (message.photo or message.sticker):
@@ -77,7 +98,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await message.delete()
                 logger.warning(
-                    f"🚫 Deleted prohibited content from {user.full_name} ({user.id}): "
+                    f"🚫 Deleted prohibited content from {user.full_name} ({user.id}) in chat {chat.id}: "
                     f"Type: {content_result.get('content_type', 'unknown')}, "
                     f"Scores: N={content_result.get('max_explicit', 0):.2f}, "
                     f"CA={content_result.get('max_child_abuse', 0):.2f}, "
@@ -99,7 +120,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Failed to delete message: {e}")
         else:
-            logger.info(f"✅ Content approved: {user.full_name} ({user.id})")
+            logger.info(f"✅ Content approved from {user.full_name} ({user.id}) in chat {chat.id}")
 
     except Exception as e:
         logger.error(f"Error processing message: {e}", exc_info=True)
@@ -118,24 +139,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if proc_time > 5.0:
             logger.warning(f"Slow processing detected: {proc_time:.2f}s")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command"""
-    await update.message.reply_text(
-        "🛡️ Advanced Auto-Moderation Bot is active!\n\n"
-        "I automatically detect and remove:\n"
-        "• Explicit 18+ content\n"
-        "• Child exploitation material\n"
-        "• Violent/graphic content\n"
-        "• Drug-related material\n\n"
-        "Normal stickers and images are never deleted!"
-    )
-
 def main():
     """Start the bot"""
     # Verify environment
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN environment variable is not set!")
         return
+    
+    if OWNER_ID == 0:
+        logger.warning("OWNER_ID not set! Sudo features will be disabled")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -144,18 +156,36 @@ def main():
         logger.warning("⚠️ FFmpeg not installed! Video processing disabled.")
     else:
         logger.info("✅ FFmpeg available for video processing")
+    
+    # Check database connection
+    if db.is_connected():
+        logger.info("✅ MongoDB connection established")
+    else:
+        logger.warning("⚠️ MongoDB connection failed! Some features disabled")
 
     # Add handlers
+    # Command handlers
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("stats", stats_command))
+    app.add_handler(CommandHandler("broadcast", broadcast_command))
+    app.add_handler(CommandHandler("addsudo", addsudo_command))
+    app.add_handler(CommandHandler("rmsudo", rmsudo_command))
+    app.add_handler(CommandHandler("sudolist", sudolist_command))
+    
+    # Button callback handler
+    app.add_handler(CallbackQueryHandler(callback_handler))
+    
+    # Message handler for media
     app.add_handler(MessageHandler(
         filters.PHOTO | filters.Sticker.ALL,
         handle_message
     ))
-    app.add_handler(CommandHandler("start", start))
 
     logger.info("🤖 Bot is starting...")
     logger.info(f"🔍 Using policy: "
                 f"Explicit threshold={policy.explicit_threshold}, "
                 f"Partial nudity threshold={policy.partial_nudity_threshold}")
+    logger.info(f"👑 Owner ID: {OWNER_ID}")
 
     try:
         app.run_polling(drop_pending_updates=True)
