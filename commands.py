@@ -5,8 +5,7 @@ import datetime
 from telegram import (
     Update, 
     InlineKeyboardButton, 
-    InlineKeyboardMarkup,
-    InputMediaPhoto
+    InlineKeyboardMarkup
 )
 from telegram.ext import ContextTypes
 from database import db
@@ -282,7 +281,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "broadcast_cancel":
         await query.edit_message_text("❌ Broadcast cancelled.")
     
-    # Help button handler
+    # Help button handler - send as new message to avoid photo editing issues
     elif query.data == "help":
         help_text = (
             "🛡️ <b>Shiro SafeBot Commands</b> 🛡️\n\n"
@@ -304,8 +303,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Edit message to show help
-        await query.edit_message_text(
+        # Send as new message instead of editing
+        await query.message.reply_text(
             help_text,
             parse_mode="HTML",
             reply_markup=reply_markup
@@ -337,8 +336,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Edit message back to start
-        await query.edit_message_text(
+        # Send as new message
+        await query.message.reply_text(
             welcome_text,
             reply_markup=reply_markup
         )
+        
+        # Delete the help message
+        try:
+            await query.message.delete()
+        except Exception as e:
+            logger.error(f"Error deleting message: {e}")
