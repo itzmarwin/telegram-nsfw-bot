@@ -157,15 +157,28 @@ async def new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
         # Send welcome message
-        welcome_text = (
+        group_text = (
             "🌸 Hello everyone! I'm Shiro SafeBot! 🌸\n\n"
-            "I'm here to keep this group clean and safe by automatically deleting NSFW content!\n"
-            "Just make me an admin with delete permissions, and I'll do the rest!\n"
-            "Stay safe, stay happy! ✨🐰"
+            "I'm your friendly neighborhood content guardian! 🛡️\n"
+            "I keep chats clean and comfy by removing NSFW content automatically.\n\n"
+            "Just make me an admin with delete permissions,\n"
+            "and I'll handle the rest to keep our space safe and happy! ✨🐰"
         )
         
+        # Buttons for group welcome
+        keyboard = [
+            [
+                InlineKeyboardButton("❌ Close", callback_data="close_message"),
+                InlineKeyboardButton("👥 Support", url=os.getenv("SUPPORT_GROUP_URL", "https://t.me/your_support_group"))
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         try:
-            await update.message.reply_text(welcome_text)
+            await update.message.reply_text(
+                group_text,
+                reply_markup=reply_markup
+            )
         except Exception as e:
             logger.error(f"Failed to send group welcome: {e}")
 
