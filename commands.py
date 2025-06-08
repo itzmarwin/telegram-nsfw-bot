@@ -8,6 +8,7 @@ from telegram import (
     InlineKeyboardMarkup
 )
 from telegram.ext import ContextTypes
+from telegram.constants import ChatType
 from database import db
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ BOT_START_TIME = time.time()
 
 # Welcome image URL (set in environment)
 WELCOME_IMAGE_URL = os.getenv("WELCOME_IMAGE_URL", "https://example.com/path/to/image.jpg")
+SUPPORT_GROUP_URL = os.getenv("SUPPORT_GROUP_URL", "https://t.me/your_support_group")
 
 def format_uptime(seconds):
     """Convert seconds to human-readable format"""
@@ -41,9 +43,10 @@ def format_uptime(seconds):
     return ", ".join(parts)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Enhanced start command with image and buttons"""
+    """Enhanced start command with different behavior for private and group chats"""
     user = update.effective_user
     message = update.message
+    chat = update.effective_chat
     
     # Add user to database
     if db.is_connected():
@@ -54,53 +57,79 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             last_name=user.last_name
         )
     
-    # Create buttons with new layout
-    keyboard = [
-        # Row 1: Single "Add to Group" button
-        [
-            InlineKeyboardButton("𝗔𝗗𝗗 𝗠𝗘 𝗧𝗢 𝗬𝗢𝗨𝗥 𝗚𝗥𝗢𝗨𝗣", 
-                                 url="https://t.me/ShiroSafebot?startgroup=true")
-        ],
-        # Row 2: Help & Commands and Updates
-        [
-            InlineKeyboardButton("𝗛𝗲𝗹𝗽 & 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀", 
-                                 callback_data="help"),
-            InlineKeyboardButton("𝗨𝗽𝗱𝗮𝘁𝗲𝘀", 
-                                 url="https://t.me/samurais_network")
-        ],
-        # Row 3: Developer and Support
-        [
-            InlineKeyboardButton("𝗗𝗲𝘃𝗲𝗹𝗼𝗽𝗲𝗿", 
-                                 url="https://t.me/Itz_Marv1n"),
-            InlineKeyboardButton("𝗦𝘂𝗽𝗽𝗼𝗿𝘁", 
-                                 url="https://t.me/Anime_Group_chat_en")
+    # Private chat - show full welcome with image
+    if chat.type == ChatType.PRIVATE:
+        # Create buttons with new layout
+        keyboard = [
+            # Row 1: Single "Add to Group" button
+            [
+                InlineKeyboardButton("𝗔𝗗𝗗 𝗠𝗘 𝗧𝗢 𝗬𝗢𝗨𝗥 𝗚𝗥𝗢𝗨𝗣", 
+                                     url="https://t.me/shirosafebot?startgroup=true")
+            ],
+            # Row 2: Help & Commands and Updates
+            [
+                InlineKeyboardButton("𝗛𝗲𝗹𝗽 & 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀", 
+                                     callback_data="help"),
+                InlineKeyboardButton("𝗨𝗽𝗱𝗮𝘁𝗲𝘀", 
+                                     url="https://t.me/Samurais_network")
+            ],
+            # Row 3: Developer and Support
+            [
+                InlineKeyboardButton("𝗗𝗲𝘃𝗲𝗹𝗼𝗽𝗲𝗿", 
+                                     url="https://t.me/Itz_Marv1n"),
+                InlineKeyboardButton("𝗦𝘂𝗽𝗽𝗼𝗿𝘁", 
+                                     url=SUPPORT_GROUP_URL)
+            ]
         ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # Welcome text
-    welcome_text = (
-        f"🌸 Hello, {user.first_name}! I'm Shiro SafeBot! 🌸\n\n"
-        "I'm here to keep your group clean and safe by deleting all NSFW stickers and images!\n"
-        "Let's make your chats nice and comfy for everyone! ✨🐾\n\n"
-        "Just add me as admin, and I'll do the rest!\n"
-        "Stay safe, stay happy! ✨🐰"
-    )
-    
-    # Send welcome message with image
-    try:
-        await message.reply_photo(
-            photo=WELCOME_IMAGE_URL,
-            caption=welcome_text,
-            reply_markup=reply_markup
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Welcome text
+        welcome_text = (
+            f"🌸 Hello, {user.first_name}! I'm Shiro SafeBot! 🌸\n\n"
+            "I'm here to keep your group clean and safe by deleting all NSFW stickers and images!\n"
+            "Let's make your chats nice and comfy for everyone! ✨🐾\n\n"
+            "Just add me as admin, and I'll do the rest!\n"
+            "Stay safe, stay happy! ✨🐰"
         )
-    except Exception as e:
-        logger.error(f"Failed to send welcome image: {e}")
-        # Fallback to text message if image fails
+        
+        # Send welcome message with image
+        try:
+            await message.reply_photo(
+                photo=WELCOME_IMAGE_URL,
+                caption=welcome_text,
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            logger.error(f"Failed to send welcome image: {e}")
+            # Fallback to text message if image fails
+            await message.reply_text(
+                welcome_text,
+                reply_markup=reply_markup
+            )
+    
+    # Group chat - show simplified message
+    else:
+        group_text = (
+            "🌸 Hello everyone! I'm Shiro SafeBot! 🌸\n\n"
+            "I'm your friendly neighborhood content guardian! 🛡️\n"
+            "I keep chats clean and comfy by removing NSFW content automatically.\n\n"
+            "Just make me an admin with delete permissions,\n"
+            "and I'll handle the rest to keep our space safe and happy! ✨🐰"
+        )
+        
+        # Buttons for group message
+        keyboard = [
+            [
+                InlineKeyboardButton("❌ Close", callback_data="close_message"),
+                InlineKeyboardButton("👥 Support", url=SUPPORT_GROUP_URL)
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await message.reply_text(
-            welcome_text,
+            group_text,
             reply_markup=reply_markup
-        )
+)
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show bot statistics"""
