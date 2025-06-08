@@ -286,6 +286,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle button callbacks with proper message editing"""
     query = update.callback_query
     await query.answer()
+
+    if query.data == "close_message":
+        try:
+            await query.message.delete()
+        except Exception as e:
+            logger.error(f"Failed to delete message: {e}")
+        return
     
     # Broadcast confirmation
     if query.data == "broadcast_confirm":
